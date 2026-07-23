@@ -65,6 +65,8 @@ describe('Pixelalarm API', function () {
       self.app.use('/api/v2/authorization', ctx.authorization.endpoints);
       self.app.get('/pebble', ctx.pebble);
       self.app.use('/properties', ctx.properties);
+      self.app.use('/summary', require('../lib/api2/summary')(self.env, ctx));
+      self.app.use('/ddata', require('../lib/data/endpoints')(self.env, ctx));
 
       // Minimal stand-in for the API v3 app: the interceptor in front of a
       // marker route, exactly how lib/api3/index.js mounts it in front of
@@ -220,6 +222,36 @@ describe('Pixelalarm API', function () {
       });
   });
 
+  it('blanks /summary, /ddata and /count for the sugarpixel token while armed', function (done) {
+    self.ctx.pixelalarm.isTargetSubject('SugarPixel').should.equal(true);
+    self.ctx.pixelalarm.isTargetSubject('wife').should.equal(false);
+    request(self.app)
+      .get('/summary?token=' + self.pixelToken)
+      .expect(200)
+      .end(function (err, res) {
+        if (err) { return done(err); }
+        res.body.sgvs.should.be.an.Array();
+        res.body.sgvs.length.should.equal(0);
+        request(self.app)
+          .get('/ddata/at?token=' + self.pixelToken)
+          .expect(200)
+          .end(function (err2, res2) {
+            if (err2) { return done(err2); }
+            res2.body.sgvs.should.be.an.Array();
+            res2.body.sgvs.length.should.equal(0);
+            request(self.app)
+              .get('/api/v1/count/entries/where?token=' + self.pixelToken)
+              .expect(200)
+              .end(function (err3, res3) {
+                if (err3) { return done(err3); }
+                res3.body.should.be.an.Array();
+                res3.body.length.should.equal(0);
+                done();
+              });
+          });
+      });
+  });
+
   it('passes real data through while armed when real glucose is at/below the safety threshold', function (done) {
     self.ctx.ddata.sgvs = [{ mills: Date.now(), mgdl: 45 }];
     request(self.app)
@@ -301,6 +333,26 @@ describe('Pixelalarm API', function () {
             if (err2) { return done(err2); }
             res2.body.bgnow.last.should.equal(40);
             res2.body.delta.mgdl.should.equal(0);
+            done();
+          });
+      });
+  });
+
+  it('serves the fake LOW on /summary and /ddata while triggered', function (done) {
+    request(self.app)
+      .get('/summary?token=' + self.pixelToken)
+      .expect(200)
+      .end(function (err, res) {
+        if (err) { return done(err); }
+        res.body.sgvs.length.should.equal(1);
+        res.body.sgvs[0].sgv.should.equal(40);
+        request(self.app)
+          .get('/ddata/at?token=' + self.pixelToken)
+          .expect(200)
+          .end(function (err2, res2) {
+            if (err2) { return done(err2); }
+            res2.body.sgvs.length.should.equal(1);
+            res2.body.sgvs[0].mgdl.should.equal(40);
             done();
           });
       });
