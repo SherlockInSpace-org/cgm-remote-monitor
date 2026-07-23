@@ -227,3 +227,60 @@ collection that is auto-created) and nothing else. **Your existing database,
 9. Rollback if needed: `git checkout <old-commit> && npm install` and
    restart. (The `pixelalarm` Mongo collection is inert to older code and can
    stay.)
+
+### Recommended: run Nightscout as a native systemd service
+
+A legacy `rc.local` → `screen` → `sudo` → wrapper-script chain swallows all
+server output, leaving no logs. Replace it with a first-class unit — this
+gives journald logging, restart-on-crash and boot ordering:
+
+1. Convert the wrapper script's `export KEY="value"` lines into plain
+   `KEY=value` lines in `/etc/nightscout.env`, then `chmod 600` it (systemd
+   reads it as root before dropping privileges, so the secrets file can be
+   root-only while the process runs unprivileged).
+2. Create `/etc/systemd/system/nightscout.service`:
+
+   ```ini
+   [Unit]
+   Description=Nightscout CGM remote monitor
+   Wants=network-online.target
+   After=network-online.target
+   # If MongoDB runs locally on this VM, uncomment:
+   # Wants=mongod.service
+   # After=mongod.service
+
+   [Service]
+   Type=simple
+   User=nobody
+   Group=nogroup
+   WorkingDirectory=/path/to/cgm-remote-monitor
+   EnvironmentFile=/etc/nightscout.env
+   ExecStart=/usr/bin/node server.js
+   Restart=always
+   RestartSec=10
+   SyslogIdentifier=nightscout
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   Set `WorkingDirectory` to the app checkout (the repo-root `server.js`
+   shim is the entrypoint) and the node path from `command -v node`.
+3. Cut over:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable nightscout
+   # remove the screen line from /etc/rc.local; disable rc-local if now empty
+   sudo systemctl disable rc-local
+   sudo screen -S nightscout -X quit
+   sudo systemctl start nightscout
+   ```
+4. Make the journal persistent (Ubuntu defaults to RAM-only):
+
+   ```bash
+   sudo mkdir -p /var/log/journal
+   sudo systemctl restart systemd-journald
+   ```
+5. Logs: `journalctl -u nightscout -f`, and the feature's audit trail with
+   `journalctl -u nightscout | grep pixelalarm`.
