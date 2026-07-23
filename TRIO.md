@@ -70,7 +70,8 @@ Header: `api-secret: <sha1(API_SECRET)>`
     "value": 40,
     "triggerDurationSeconds": 60,
     "triggerTimeoutSeconds": 600,
-    "safetyThreshold": 55
+    "safetyThreshold": 55,
+    "leadinValue": 130
   }
 }
 ```

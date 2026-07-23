@@ -276,15 +276,18 @@ describe('Pixelalarm API', function () {
         res.body.triggeredBy.should.equal('wife');
         should(res.body.firstServedAt).be.null();
         request(self.app)
-          .get('/api/v1/entries/sgv.json?count=10&token=' + self.pixelToken)
+          .get('/api/v1/entries/sgv.json?count=3&token=' + self.pixelToken)
           .expect(200)
           .end(function (err2, res2) {
             if (err2) { return done(err2); }
-            res2.body.length.should.equal(1);
+            res2.body.length.should.equal(3, 'must honor the requested count');
             res2.body[0].sgv.should.equal(40);
             res2.body[0].type.should.equal('sgv');
             res2.body[0].device.should.equal('pixelalarm');
-            res2.body[0].direction.should.equal('Flat');
+            res2.body[0].direction.should.equal('DoubleDown');
+            res2.body[1].sgv.should.equal(85);
+            res2.body[2].sgv.should.equal(130, 'oldest backfilled reading must be the lead-in value');
+            (res2.body[0].date - res2.body[1].date).should.equal(300000, 'series must be 5 minutes apart');
             (Date.now() - res2.body[0].date).should.be.below(10000, 'fake entry must have a fresh timestamp');
             done();
           });
@@ -311,7 +314,7 @@ describe('Pixelalarm API', function () {
       .expect(200)
       .end(function (err, res) {
         if (err) { return done(err); }
-        res.body.length.should.equal(1);
+        res.body.length.should.equal(10);
         res.body[0].device.should.equal('pixelalarm');
         done();
       });
@@ -332,7 +335,9 @@ describe('Pixelalarm API', function () {
           .end(function (err2, res2) {
             if (err2) { return done(err2); }
             res2.body.bgnow.last.should.equal(40);
-            res2.body.delta.mgdl.should.equal(0);
+            res2.body.bgnow.sgvs.length.should.equal(3);
+            res2.body.delta.mgdl.should.equal(-45, 'delta must reflect the falling backfill ramp');
+            res2.body.direction.value.should.equal('DoubleDown');
             done();
           });
       });
@@ -344,14 +349,14 @@ describe('Pixelalarm API', function () {
       .expect(200)
       .end(function (err, res) {
         if (err) { return done(err); }
-        res.body.sgvs.length.should.equal(1);
+        res.body.sgvs.length.should.equal(3);
         res.body.sgvs[0].sgv.should.equal(40);
         request(self.app)
           .get('/ddata/at?token=' + self.pixelToken)
           .expect(200)
           .end(function (err2, res2) {
             if (err2) { return done(err2); }
-            res2.body.sgvs.length.should.equal(1);
+            res2.body.sgvs.length.should.equal(3);
             res2.body.sgvs[0].mgdl.should.equal(40);
             done();
           });
@@ -365,7 +370,7 @@ describe('Pixelalarm API', function () {
       .end(function (err, res) {
         if (err) { return done(err); }
         res.body.result.should.be.an.Array();
-        res.body.result.length.should.equal(1);
+        res.body.result.length.should.equal(3);
         res.body.result[0].sgv.should.equal(40);
         res.body.result[0].should.have.property('identifier');
         request(self.app)

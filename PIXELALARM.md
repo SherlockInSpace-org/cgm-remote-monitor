@@ -12,7 +12,7 @@ is ever written to the database; all interception happens at read time.
 |---|---|---|
 | `off` | Real live CGM data | Real data |
 | `armed` | An empty feed (display goes stale/blank) | Real data |
-| `triggered` | A fake LOW entry (default 40 mg/dL) with a fresh timestamp on every poll | Real data |
+| `triggered` | A fake LOW reading (default 40 mg/dL) with a fresh timestamp on every poll, backed by a falling history: older backfilled readings at 5-minute spacing ramp down from `PIXELALARM_LEADIN_VALUE`, honoring the device's requested `count`, so the payload contains a real threshold crossing and a computable delta | Real data |
 
 - **Arm / disarm** requires the `pixelalarm:admin` permission (the admin
   `API_SECRET` always has it). Intended for a button in Trio — see
@@ -82,6 +82,7 @@ no endpoints, no interception, zero request overhead.
 | `PIXELALARM_TRIGGER_DURATION` | `60` | Seconds the fake value keeps being served, counted from the device's first fetch |
 | `PIXELALARM_TRIGGER_TIMEOUT` | `600` | Seconds to wait for the device to fetch before giving up and reverting to armed |
 | `PIXELALARM_SAFETY_THRESHOLD` | `55` | Real-glucose passthrough threshold in mg/dL; `0` disables |
+| `PIXELALARM_LEADIN_VALUE` | `130` | While triggered, older backfilled readings ramp down from this value (falling trend + threshold crossing for the device's alert engine); any value ≤ `PIXELALARM_VALUE` serves a flat all-low series instead |
 | `MONGO_PIXELALARM_COLLECTION` | `pixelalarm` | Mongo collection holding the single state document (state survives restarts) |
 
 ## One-time Nightscout setup
@@ -131,7 +132,8 @@ open site can neither see nor touch alarm state.
     "value": 40,
     "triggerDurationSeconds": 60,
     "triggerTimeoutSeconds": 600,
-    "safetyThreshold": 55
+    "safetyThreshold": 55,
+    "leadinValue": 130
   }
 }
 ```
